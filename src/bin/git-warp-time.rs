@@ -1,14 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 Caleb Maclennan <caleb@alerque.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
-use clap::CommandFactory;
-
-use git_warp_time::cli::Cli;
-use git_warp_time::FileSet;
-use git_warp_time::{get_repo, reset_mtimes, resolve_repo_path};
-
-use snafu::prelude::*;
 use std::path::Path;
+
+use clap::CommandFactory;
+use git_warp_time::FileSet;
+use git_warp_time::cli::Cli;
+use git_warp_time::{get_repo, reset_mtimes, resolve_repo_path};
+use snafu::prelude::*;
 
 #[derive(Snafu)]
 enum Error {
@@ -60,6 +59,7 @@ fn main() -> Result<()> {
         }
         opts = opts.paths(Some(paths));
     }
-    reset_mtimes(repo, opts).context(UnableToResetMTimeSnafu)?;
+
+    reset_mtimes(&repo, opts).context(UnableToResetMTimeSnafu)?;
     Ok(())
 }
