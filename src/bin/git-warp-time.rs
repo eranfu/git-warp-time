@@ -1,14 +1,13 @@
 // SPDX-FileCopyrightText: © 2021 Caleb Maclennan <caleb@alerque.com>
 // SPDX-License-Identifier: GPL-3.0-only
 
+use camino::Utf8PathBuf;
 use clap::CommandFactory;
-
-use git_warp_time::cli::Cli;
 use git_warp_time::FileSet;
+use git_warp_time::cli::Cli;
 use git_warp_time::{get_repo, reset_mtimes, resolve_repo_path};
-
+use glob::MatchOptions;
 use snafu::prelude::*;
-use std::path::Path;
 
 #[derive(Snafu)]
 enum Error {
@@ -51,15 +50,35 @@ fn main() -> Result<()> {
         .verbose(!matches.get_flag("quiet"));
     if matches.contains_id("paths") {
         let mut paths: FileSet = FileSet::new();
-        for path in positionals.context(UnableToFormPathSnafu)? {
-            if !Path::new(path).exists() {
-                return PathNotFoundSnafu { path: path.clone() }.fail();
+        for path_string in positionals.context(UnableToFormPathSnafu)? {
+            for path in glob::glob_with(
+                path_string,
+                MatchOptions {
+                    case_sensitive: false,
+                    require_literal_separator: true,
+                    require_literal_leading_dot: false,
+                },
+            )
+            .expect("Failed to read glob pattern")
+            {
+                let path = match path {
+                    Ok(path) => Utf8PathBuf::from_path_buf(path)
+                        .map_err(|_e| PathNotFoundSnafu { path: path_string }.build())?,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        continue;
+                    }
+                };
+                if !path.exists() {
+                    return PathNotFoundSnafu { path }.fail();
+                }
+                let path = resolve_repo_path(&repo, path).context(CouldNotAccessRepositorySnafu)?;
+                paths.insert(path);
             }
-            let path = resolve_repo_path(&repo, path).context(CouldNotAccessRepositorySnafu)?;
-            paths.insert(path);
         }
         opts = opts.paths(Some(paths));
     }
-    reset_mtimes(repo, opts).context(UnableToResetMTimeSnafu)?;
+
+    reset_mtimes(&repo, opts).context(UnableToResetMTimeSnafu)?;
     Ok(())
 }
